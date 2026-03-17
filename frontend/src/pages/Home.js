@@ -29,47 +29,6 @@ const Home = () => {
     return mapping[nodeId] || nodeId;
   };
 
-  // Get time range parameters based on selection
-  const getTimeRangeParams = () => {
-    const now = new Date();
-    let fromDate, toDate;
-
-    switch (selectedTimeRange) {
-      case '1h':
-        fromDate = new Date(now.getTime() - (1 * 60 * 60 * 1000));
-        toDate = now;
-        break;
-      case '6h':
-        fromDate = new Date(now.getTime() - (6 * 60 * 60 * 1000));
-        toDate = now;
-        break;
-      case '24h':
-        fromDate = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        toDate = now;
-        break;
-      case '7d':
-        fromDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-        toDate = now;
-        break;
-      case 'custom':
-        if (customFromDate && customToDate) {
-          fromDate = new Date(customFromDate);
-          toDate = new Date(customToDate);
-        } else {
-          return null; // No custom dates set
-        }
-        break;
-      default:
-        fromDate = new Date(now.getTime() - (24 * 60 * 60 * 1000));
-        toDate = now;
-    }
-
-    return {
-      from: fromDate.toISOString(),
-      to: toDate.toISOString()
-    };
-  };
-
   // Fetch real sensor data from API
   const fetchSensorData = async () => {
     try {
