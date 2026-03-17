@@ -5,10 +5,20 @@ import random
 import threading
 from datetime import datetime
 from fastapi import FastAPI
+import joblib
+import numpy as np
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
+# Load ML model at startup
+try:
+    ml_model = joblib.load("saved_models/RandomForest_model.h5")
+    print("✅ ML Model loaded successfully")
+except Exception as e:
+    print(f"⚠️ Warning: ML Model could not be loaded: {e}")
+    ml_model = None
 app = FastAPI()
 
 # Added CORS middleware
@@ -25,12 +35,19 @@ app.add_middleware(
 # ==============================
 
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def get_connection():
     return psycopg2.connect(
-        host="localhost",
-        database="iot-test",
-        user="postgres",
-        password="postgres"
+        host=os.getenv("DB_HOST", "localhost"),
+        database=os.getenv("DB_NAME", "iot-test"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", "postgres"),
+        port=os.getenv("DB_PORT", "5432"),
+        sslmode=os.getenv("DB_SSLMODE", "require")
     )
 
 
@@ -63,6 +80,19 @@ def create_tables():
         tank_width_cm FLOAT,
         lat FLOAT,
         long FLOAT
+    )
+    """)
+
+    # Predictions history table
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS predictions (
+        id SERIAL PRIMARY KEY,
+        node_id VARCHAR(50),
+        distance FLOAT,
+        temperature FLOAT,
+        prediction VARCHAR(50),
+        confidence FLOAT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -310,6 +340,102 @@ def get_sensor_data(node_id: str = None):
             "distance": row[2],
             "temperature": row[3],
             "created_at": row[4]
+        })
+
+    return result
+
+# ==============================
+# ML PREDICTION APIs
+# ==============================
+
+@app.post("/api/v1/predict")
+async def predict_water_activity(data: dict):
+    """
+    Predict water activity based on sensor data
+    Input: {"distance": float, "temperature": float, "time_features": list}
+    Output: {"prediction": string, "confidence": float}
+    """
+    if ml_model is None:
+        return {"error": "ML Model not loaded on the backend"}
+
+    try:
+        distance = data.get("distance", 0.0)
+        temperature = data.get("temperature", 0.0)
+        diff = data.get("diff", 0.0)
+        slope = data.get("slope", 0.0)
+
+        # The random forest takes a 3-feature window for standard predictions (distance, diff, slope).
+        input_data = np.array([[distance, diff, slope]])
+
+        prediction_prob = ml_model.predict_proba(input_data)[0]
+        prediction_idx = np.argmax(prediction_prob)
+        confidence = float(prediction_prob[prediction_idx])
+
+        # Using label_encoder.classes_ from the notebook:
+        classes = ["filling", "flush", "geyser", "no_activity", "washing_machine"]
+        prediction_label = classes[prediction_idx]
+
+        # Save to database
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+        INSERT INTO predictions (node_id, distance, temperature, prediction, confidence)
+        VALUES (%s, %s, %s, %s, %s)
+        """, (data.get("node_id", "NODE_001"), distance, temperature, prediction_label, confidence))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return {
+            "prediction": prediction_label, 
+            "confidence": confidence
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/v1/model-info")
+async def get_model_info():
+    """
+    Return information about the deployed ML model
+    """
+    return {
+        "model_type": "RandomForest",
+        "version": "1.0",
+        "accuracy": 0.99,  # Update with model's accuracy after tuning
+        "last_trained": "2026-03-10",
+        "classes": ["filling", "flush", "geyser", "no_activity", "washing_machine"]
+    }
+
+@app.get("/api/v1/predictions-history")
+async def get_predictions_history(limit: int = 100):
+    """
+    Get historical predictions with timestamps
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+    SELECT id, node_id, distance, temperature, prediction, confidence, created_at
+    FROM predictions
+    ORDER BY created_at DESC
+    LIMIT %s
+    """, (limit,))
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    result = []
+    for row in rows:
+        result.append({
+            "id": row[0],
+            "node_id": row[1],
+            "distance": row[2],
+            "temperature": row[3],
+            "prediction": row[4],
+            "confidence": row[5],
+            "created_at": row[6]
         })
 
     return result

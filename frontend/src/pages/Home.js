@@ -7,6 +7,7 @@ const Home = () => {
   const [temperature, setTemperature] = useState(0);
   const [waterLevelData, setWaterLevelData] = useState([]);
   const [temperatureData, setTemperatureData] = useState([]);
+  const [latestPrediction, setLatestPrediction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [nodes, setNodes] = useState([]);
@@ -81,13 +82,19 @@ const Home = () => {
       let url = "http://127.0.0.1:8000/sensor-data";
 
 
-      const response = await axios.get(url, {
-        headers: {
-          'accept': 'application/json'
-        }
-      });
+      const [sensorResponse, predResponse] = await Promise.all([
+        axios.get(`${process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000'}/sensor-data`, { headers: { 'accept': 'application/json' } }),
+        axios.get(`${process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000'}/api/v1/predictions-history?limit=1`)
+      ]);
 
-      const allSensorData = response.data || [];
+      const allSensorData = sensorResponse.data || [];
+      const predData = predResponse.data || [];
+
+      if (predData.length > 0) {
+        setLatestPrediction(predData[0]);
+      } else {
+        setLatestPrediction(null);
+      }
 
       const actualNodeId = getActualTankId(selectedNode);
 
@@ -180,7 +187,7 @@ const Home = () => {
   const fetchNodes = async () => {
     try {
       const response = await axios.get(
-        'http://127.0.0.1:8000/tank-parameters',
+        `${process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000'}/tank-parameters`,
         {
           headers: {
             'accept': 'application/json'
@@ -414,6 +421,29 @@ const Home = () => {
 
       {/* Cards Section */}
       <div className="cards-container">
+        
+        <div className="card prediction-home-card" style={{borderLeftColor: '#667eea'}}>
+          <div className="card-header">
+            <div className="card-icon" style={{background: 'rgba(102, 126, 234, 0.1)', color: '#667eea'}}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              </svg>
+            </div>
+            <h3>AI Prediction</h3>
+          </div>
+          <div className="card-value">
+            <span className="value" style={{fontSize: '2rem'}}>
+              {loading ? '--' : (!latestPrediction ? 'N/A' : latestPrediction.prediction.replace('_', ' ').toUpperCase())}
+            </span>
+          </div>
+          <div className="card-status">
+            <span className={`status ${!latestPrediction ? 'no-data' : 'good'}`} style={{background: 'rgba(102,126,234,0.1)', color: '#667eea'}}>
+              {!latestPrediction ? 'No Data' : `Confidence: ${Math.round(latestPrediction.confidence * 100)}%`}
+            </span>
+          </div>
+        </div>
+
         <div className="card water-level-card">
           <div className="card-header">
             <div className="card-icon water-icon">

@@ -10,13 +10,16 @@ const Navbar = ({ onToggleSidebar }) => {
           <div className="hamburger-line"></div>
         </button>
         
-        <div className="logo">
-          <img src="https://tse4.mm.bing.net/th/id/OIP.OQ6ucQ9Mfhg3t1WngxT2UgHaEM?pid=Api&P=0&h=180" alt="Logo" className="logo-img" />
+        <div className="logo" style={{background: 'transparent'}}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
         </div>
       </div>
       
       <div className="navbar-center">
-        <h1 className="navbar-title">IOT Dashboard</h1>
+        <h1 className="navbar-title">University IoT Research Center</h1>
       </div>
       
       {/* <div className="navbar-right">
